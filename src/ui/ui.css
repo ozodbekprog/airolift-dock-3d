@@ -1,0 +1,405 @@
+/* AiroLift D2 — interface chrome over the stage canvas.
+   Clinical aerospace: paper, ink, shell grey, one signal colour. Hairlines, 4 px radii, no blur.
+   Tokens sit on :root and flip under [data-theme="dark"]. chrome.js writes --thin on the root element:
+   0 at the stage, 1 inside the scroll story, so the canvas layer can thin itself as well. */
+
+:root {
+  --al-ui: 1;
+  --paper: #F2F1EE;
+  --ink: #14171A;
+  --shell: #D9DDE0;
+  --signal: #FF7A18;
+  --ink-2: #454C53;
+  --ink-3: #5C646B;
+  --rule: rgba(20, 23, 26, .14);
+  --rule-2: rgba(20, 23, 26, .38);
+  --night: #14171A;
+  --shadow: 0 1px 2px rgba(20, 23, 26, .08);
+  --sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+  --h1: clamp(2.25rem, min(1rem + 5vw, 10.5vh), 5.75rem);
+  --h2: clamp(1.75rem, 1.1rem + 2.2vw, 3.25rem);
+  --body: clamp(.9375rem, .88rem + .25vw, 1.0625rem);
+  --small: .8125rem;
+  --cap: .6875rem;
+  --gutter: clamp(16px, 2.4vw, 36px);
+  --bar: 56px;
+  --radius: 4px;
+  --ease: cubic-bezier(.22, .61, .36, 1);
+  --fast: 180ms;
+  --slow: 260ms;
+  --thin: 0;
+  color-scheme: light;
+}
+[data-theme="dark"] {
+  --paper: #14171A;
+  --ink: #F2F1EE;
+  --shell: #2A3036;
+  --ink-2: #C2C6C9;
+  --ink-3: #969DA3;
+  --rule: rgba(242, 241, 238, .16);
+  --rule-2: rgba(242, 241, 238, .42);
+  --night: #2A3036;
+  --shadow: 0 1px 2px rgba(0, 0, 0, .32);
+  color-scheme: dark;
+}
+
+/* ---- Base ---- */
+.al-ui {
+  --pad: max(var(--gutter), env(safe-area-inset-left, 0px), env(safe-area-inset-right, 0px));
+  position: relative; z-index: 1; color: var(--ink); font: var(--body)/1.5 var(--sans);
+  -webkit-font-smoothing: antialiased; -webkit-text-size-adjust: 100%; text-size-adjust: 100%; pointer-events: none;
+}
+.al-ui *, .al-ui *::before, .al-ui *::after { box-sizing: border-box; }
+.al-ui :where(h1, h2, p, ul, dl, dd) { margin: 0; padding: 0; list-style: none; }
+.al-ui :where(a) { color: inherit; text-decoration: none; }
+.al-ui :where(button, input) { margin: 0; padding: 0; border: 0; border-radius: 0; background: none; font: inherit; color: inherit; }
+.al-ui :where(button) { cursor: pointer; touch-action: manipulation; -webkit-tap-highlight-color: transparent; }
+.al-ui :where(svg) { display: block; flex: none; }
+.al-ui [hidden] { display: none !important; }
+.al-ui :focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+.al-ui [tabindex="-1"]:focus { outline: none; }
+
+.al-cap { font-size: var(--cap); font-weight: 600; line-height: 1.2; letter-spacing: .1em; text-transform: uppercase; color: var(--ink-3); }
+.al-num, .al-unit { font-family: var(--mono); font-variant-numeric: tabular-nums slashed-zero; letter-spacing: -.01em; }
+.al-unit { font-size: var(--cap); font-weight: 400; text-transform: none; color: var(--ink-3); }
+.al-note { max-width: 28rem; margin-top: 16px; font-size: .9375rem; color: var(--ink-2); }
+.al-mark circle { fill: var(--signal); }
+.al-plate { border: 1px solid var(--rule); border-radius: var(--radius); background: var(--paper); box-shadow: var(--shadow); pointer-events: auto; }
+.al-hero h1, .al-flow h2 { font-weight: 600; letter-spacing: -.04em; text-wrap: balance; }
+/* Stage chrome leaves as the story arrives. */
+.al-fade { opacity: calc(1 - var(--thin) * 1.6); }
+.al-layer[data-away] :is(.al-fade, .al-hotspots) { visibility: hidden; }
+
+/* ---- Buttons ---- */
+.al-btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 10px; height: 44px; padding: 0 18px;
+  border: 1px solid transparent; border-radius: var(--radius); font-size: .875rem; font-weight: 600; line-height: 1; white-space: nowrap;
+  pointer-events: auto; transition: background-color var(--fast) var(--ease), border-color var(--fast) var(--ease), color var(--fast) var(--ease);
+}
+.al-btn svg { transition: transform var(--fast) var(--ease); }
+.al-btn--primary { background: var(--ink); color: var(--paper); }
+.al-btn--secondary { border-color: var(--rule-2); background: var(--paper); }
+.al-btn--ghost { height: 36px; padding: 0 14px; border-color: var(--rule-2); font-size: var(--small); }
+.al-iconbtn { display: inline-grid; place-items: center; width: 28px; height: 28px; border-radius: var(--radius); pointer-events: auto; }
+
+/* ---- Overlay grid ---- */
+.al-scrim { position: fixed; inset: 0; background: var(--paper); opacity: calc(var(--thin) * .84); }
+.al-layer {
+  position: fixed; inset: 0; z-index: 10; display: grid; gap: 16px var(--gutter);
+  grid-template: "top top" var(--bar) "hero rail" minmax(0, 1fr) "dock dock" auto / minmax(0, 1fr) auto;
+  padding: 0 var(--pad) max(var(--gutter), env(safe-area-inset-bottom, 0px)); user-select: none; -webkit-user-select: none;
+}
+
+/* ---- Top bar ---- */
+.al-top {
+  position: relative; z-index: 230; grid-area: top; display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: center; gap: 16px;
+  margin: 0 calc(var(--pad) * -1); padding: 0 var(--pad); border-bottom: 1px solid transparent;
+  transition: background-color var(--fast) var(--ease), border-color var(--fast) var(--ease);
+}
+.al-top[data-solid] { border-color: var(--rule); background: var(--paper); pointer-events: auto; }
+.al-brand {
+  display: inline-flex; align-items: center; gap: 10px; width: fit-content; height: 36px; border-radius: var(--radius);
+  font-size: var(--small); font-weight: 700; line-height: 1; letter-spacing: .2em; pointer-events: auto;
+}
+.al-nav { display: flex; gap: 4px; }
+.al-nav a {
+  position: relative; display: flex; align-items: center; height: 36px; padding: 0 12px; border-radius: var(--radius);
+  font-size: var(--small); font-weight: 500; color: var(--ink-2); pointer-events: auto; transition: color var(--fast) var(--ease);
+}
+.al-nav a::after { content: ""; position: absolute; inset: auto 12px 6px; height: 2px; background: var(--signal); opacity: 0; transition: opacity var(--fast) var(--ease); }
+.al-nav a[aria-current] { color: var(--ink); }
+.al-nav a[aria-current]::after { opacity: 1; }
+.al-top__actions { display: flex; gap: 8px; justify-self: end; }
+.al-top__menu { display: none; width: 36px; height: 36px; border: 1px solid var(--rule-2); }
+
+/* ---- Hero ---- */
+.al-hero { position: relative; z-index: 200; grid-area: hero; align-self: end; justify-self: start; max-width: min(100%, 38rem); padding-bottom: clamp(4px, 1.5vh, 20px); }
+.al-eyebrow { display: flex; align-items: center; gap: 10px; font-size: var(--cap); font-weight: 600; line-height: 1.2; letter-spacing: .14em; text-transform: uppercase; color: var(--ink-2); }
+.al-eyebrow::before { content: ""; flex: none; width: 6px; height: 6px; background: var(--signal); }
+.al-hero h1 { margin-top: clamp(12px, 2vh, 20px); font-size: var(--h1); line-height: .98; letter-spacing: -.045em; }
+.al-hero__lede { max-width: 33rem; margin-top: clamp(12px, 2.2vh, 22px); color: var(--ink-2); text-wrap: pretty; }
+.al-hero__cta { display: flex; flex-wrap: wrap; gap: 10px; margin-top: clamp(16px, 3vh, 30px); }
+
+/* ---- Control dock ---- */
+.al-dock { position: relative; z-index: 220; grid-area: dock; justify-self: center; max-width: 100%; }
+.al-tabs { display: none; }
+.al-dock__groups { display: flex; }
+.al-group { display: flex; flex-direction: column; gap: 7px; padding: 10px 12px 12px; }
+.al-group + .al-group { border-left: 1px solid var(--rule); }
+.al-seg { display: flex; gap: 2px; padding: 2px; border-radius: var(--radius); background: var(--shell); }
+.al-seg__opt, .al-toggle { font-size: .75rem; font-weight: 600; line-height: 1; }
+.al-seg__opt { position: relative; isolation: isolate; flex: 1 0 auto; height: 32px; padding: 0 9px; border-radius: 2px; color: var(--ink-2); transition: color var(--fast) var(--ease); }
+/* Selected: an ink key with a signal bar under it. The fill fades in, so the change stays opacity-only. */
+.al-seg__opt::before {
+  content: ""; position: absolute; inset: 0; z-index: -1; border-radius: inherit; background: var(--ink);
+  box-shadow: inset 0 -2px 0 var(--signal); opacity: 0; transition: opacity var(--fast) var(--ease);
+}
+.al-seg__opt[aria-checked="true"] { color: var(--paper); }
+.al-seg__opt[aria-checked="true"]::before { opacity: 1; }
+.al-lid { display: flex; align-items: center; gap: 10px; height: 36px; }
+.al-lid .al-num { width: 4ch; font-size: var(--small); text-align: right; }
+.al-modes { display: flex; gap: 6px; }
+/* Toggle: an ink key when on, with an indicator lamp. */
+.al-toggle {
+  display: inline-flex; flex: none; align-items: center; justify-content: center; gap: 8px; height: 36px; padding: 0 12px;
+  border: 1px solid var(--rule-2); border-radius: var(--radius);
+  transition: background-color var(--fast) var(--ease), border-color var(--fast) var(--ease), color var(--fast) var(--ease);
+}
+.al-toggle::after { content: ""; width: 6px; height: 6px; border: 1px solid var(--ink-3); border-radius: 50%; }
+.al-toggle[aria-pressed="true"] { border-color: var(--ink); background: var(--ink); color: var(--paper); }
+.al-toggle[aria-pressed="true"]::after { border-color: var(--signal); background: var(--signal); }
+.al-toggle:disabled { opacity: .38; cursor: not-allowed; }
+
+.al-range { --fill: 0%; flex: 1 1 auto; width: 120px; min-width: 96px; height: 28px; cursor: ew-resize; -webkit-appearance: none; appearance: none; }
+.al-range::-webkit-slider-runnable-track { height: 2px; background: linear-gradient(to right, var(--signal) var(--fill), var(--ink-3) var(--fill)); }
+.al-range::-moz-range-track { height: 2px; background: var(--ink-3); }
+.al-range::-moz-range-progress { height: 2px; background: var(--signal); }
+.al-range::-webkit-slider-thumb {
+  box-sizing: border-box; width: 12px; height: 20px; margin-top: -9px; border: 1.5px solid var(--ink); border-radius: 2px;
+  background: var(--paper); -webkit-appearance: none;
+}
+.al-range::-moz-range-thumb { box-sizing: border-box; width: 12px; height: 20px; border: 1.5px solid var(--ink); border-radius: 2px; background: var(--paper); }
+.al-range:focus-visible { outline: none; }
+.al-range:focus-visible::-webkit-slider-thumb { outline: 2px solid var(--ink); outline-offset: 2px; }
+.al-range:focus-visible::-moz-range-thumb { outline: 2px solid var(--ink); outline-offset: 2px; }
+
+/* ---- Instrument rail ---- */
+.al-rail { position: relative; z-index: 210; grid-area: rail; align-self: center; width: 14.5rem; max-height: 100%; overflow: hidden auto; }
+.al-rail__head { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 10px 14px; border-bottom: 1px solid var(--rule); }
+.al-live { display: inline-flex; align-items: center; gap: 6px; }
+.al-live::before { content: ""; width: 6px; height: 6px; border: 1px solid var(--ink-3); border-radius: 50%; }
+.al-live[data-live] { color: var(--ink); }
+.al-live[data-live]::before { border-color: var(--signal); background: var(--signal); }
+.al-metric { position: relative; display: flex; align-items: baseline; justify-content: space-between; gap: 10px; padding: 8px 14px; border-bottom: 1px solid var(--rule); }
+.al-metric dt, .al-metric dd { display: flex; align-items: baseline; gap: 6px; white-space: nowrap; }
+.al-metric .al-num { font-size: .9375rem; font-weight: 500; }
+.al-metric .al-unit { width: 3ch; }
+/* Out of envelope: a signal edge and a LIMIT flag. */
+.al-metric[data-warn]::before { content: ""; position: absolute; inset: 0 auto 0 0; width: 2px; background: var(--signal); }
+.al-flag { padding: 2px 5px; border-radius: 2px; background: var(--signal); font-size: .5625rem; letter-spacing: .08em; color: #14171A; }
+.al-chip { display: flex; align-items: center; gap: 8px; width: fit-content; height: 28px; margin: 10px 14px 0; padding: 0 10px; border: 1px solid var(--rule-2); border-radius: var(--radius); }
+.al-chip .al-num { font-size: var(--small); font-weight: 600; }
+.al-chip .al-cap { display: flex; align-items: center; gap: 6px; color: var(--ink-2); }
+.al-chip .al-cap::before { content: ""; width: 6px; height: 6px; background: var(--ink); }
+.al-chip[data-open] .al-cap::before { background: var(--signal); }
+.al-timeline { padding: 10px 14px; }
+.al-timeline__head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+.al-timeline__head .al-num { color: var(--ink); }
+.al-timeline__bar { position: relative; display: grid; grid-template-columns: repeat(24, 1fr); gap: 1px; height: 10px; margin-top: 8px; }
+.al-timeline__bar i { background: #D9DDE0; }
+.al-timeline__bar [data-band="dusk"] { background: #8A9299; }
+.al-timeline__bar [data-band="night"] { background: var(--night); }
+.al-timeline__cursor {
+  position: absolute; inset: -3px auto -3px 50%; width: 2px; margin-left: -1px; background: var(--signal);
+  box-shadow: 0 0 0 1px var(--paper); transition: left var(--slow) var(--ease);
+}
+.al-timeline__scale { display: flex; justify-content: space-between; margin-top: 5px; font-size: .625rem; line-height: 1; color: var(--ink-3); }
+
+/* ---- Hotspots ---- */
+/* No z-index or opacity on the layer: each pill sorts against the chrome by its own z-index. */
+.al-hotspots { position: absolute; inset: 0; }
+.al-hs { position: absolute; top: 0; left: 0; opacity: 0; visibility: hidden; transition: opacity var(--fast) var(--ease), visibility 0s var(--fast); }
+.al-hs[data-on] { opacity: calc(1 - var(--thin) * 1.6); visibility: visible; transition-delay: 0s; }
+.al-hs:focus-within { z-index: 300 !important; }
+.al-hs[data-active] { z-index: 400 !important; }
+/* The button is the 28 px cell around the anchor. The leader ends 27 px out, where the label and the card begin. */
+.al-hs__btn { position: absolute; top: -14px; left: -14px; display: grid; place-items: center; width: 28px; height: 28px; border-radius: var(--radius); pointer-events: auto; }
+.al-hs__btn i { width: 6px; height: 6px; border-radius: 50%; background: var(--signal); box-shadow: 0 0 0 2px var(--paper); }
+.al-hs[data-active] i { box-shadow: 0 0 0 2px var(--paper), 0 0 0 3px var(--ink); }
+.al-hs__btn::before { content: ""; position: absolute; top: 14px; left: 19px; width: 22px; height: 1px; background: var(--ink); }
+.al-hs__label {
+  position: absolute; top: 2px; left: 41px; display: flex; align-items: center; height: 24px; padding: 0 8px;
+  border: 1px solid var(--ink); border-radius: var(--radius); background: var(--paper);
+  font-size: var(--cap); font-weight: 600; letter-spacing: .06em; text-transform: uppercase; white-space: nowrap;
+}
+.al-hs__btn::before, .al-hs__label { transition: opacity var(--fast) var(--ease), background-color var(--fast) var(--ease), color var(--fast) var(--ease); }
+.al-hs[data-side="l"] .al-hs__btn::before { right: 19px; left: auto; }
+.al-hs[data-side="l"] .al-hs__label { right: 41px; left: auto; }
+.al-hs__btn:is(:hover, :focus-visible) .al-hs__label { background: var(--ink); color: var(--paper); }
+/* Folded: only the dot. Hover or keyboard focus brings the label back above its neighbours. */
+.al-hs[data-fold] .al-hs__btn:not(:hover, :focus-visible)::before,
+.al-hs[data-fold] .al-hs__btn:not(:hover, :focus-visible) .al-hs__label,
+.al-hs[data-active] .al-hs__label,
+.al-hs[data-loose] .al-hs__btn::before { opacity: 0; visibility: hidden; }
+.al-card {
+  position: absolute; top: -14px; left: 27px; display: grid; grid-template-columns: 1fr auto; gap: 4px 12px;
+  width: min(18rem, calc(100vw - 24px)); padding: 8px 8px 12px 12px; border-color: var(--ink); animation: al-in var(--fast) var(--ease) both;
+}
+.al-hs[data-side="l"] .al-card { right: 27px; left: auto; }
+.al-card .al-cap { align-self: center; color: var(--ink); }
+.al-card__note { grid-column: 1 / -1; padding-right: 4px; font-size: var(--small); line-height: 1.45; color: var(--ink-2); }
+
+/* ---- Scroll story, specs, footer ---- */
+.al-flow, .al-foot { position: relative; z-index: 1; }
+.al-fold { height: 100vh; height: 100svh; }
+.al-panel { min-height: 140vh; padding: 0 var(--pad); }
+.al-panel__body {
+  position: sticky; top: clamp(88px, 22vh, 240px); width: min(100%, 34rem); padding-bottom: 34vh;
+  opacity: .26; pointer-events: auto; transition: opacity var(--slow) var(--ease);
+}
+.al-panel[data-current] .al-panel__body { opacity: 1; }
+.al-panel__index { display: flex; align-items: center; gap: 12px; }
+.al-panel__index .al-num { font-size: var(--small); font-weight: 600; }
+.al-panel__index .al-num::after { content: ""; display: inline-block; width: 24px; height: 1px; margin-left: 12px; vertical-align: middle; background: var(--ink); }
+.al-flow h2 { margin-top: 18px; font-size: var(--h2); line-height: 1.04; }
+.al-bullets { margin-top: clamp(20px, 4vh, 36px); border-top: 1px solid var(--rule-2); }
+.al-bullets li { position: relative; padding: 14px 0 14px 28px; border-bottom: 1px solid var(--rule); line-height: 1.4; }
+.al-bullets li::before { content: ""; position: absolute; top: calc(13px + .7em); left: 0; width: 12px; height: 2px; background: var(--signal); }
+
+/* Sector cards inside the problems panel: pick one and the stage swaps its surroundings. */
+.al-sectors { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1px; margin-top: clamp(20px, 4vh, 32px);
+  border: 1px solid var(--rule); border-radius: var(--radius); background: var(--rule); overflow: hidden; }
+.al-sector { display: grid; gap: 6px; padding: 16px 18px; text-align: left; background: var(--paper);
+  transition: background-color var(--fast) var(--ease), color var(--fast) var(--ease); }
+.al-sector:hover { background: color-mix(in srgb, var(--paper) 90%, var(--ink)); }
+.al-sector[aria-pressed="true"] { background: var(--ink); color: var(--paper); }
+.al-sector__label { font-size: var(--small); font-weight: 650; letter-spacing: -.01em; }
+.al-sector__note { font-size: var(--small); line-height: 1.45; color: var(--ink-3); transition: color var(--fast) var(--ease); }
+.al-sector[aria-pressed="true"] .al-sector__note { color: color-mix(in srgb, var(--paper) 74%, transparent); }
+.al-sector__stat { margin-top: 2px; font-size: var(--cap); letter-spacing: .08em; text-transform: uppercase; color: var(--signal); }
+.al-lang { min-width: 46px; letter-spacing: .14em; }
+@media (max-width: 640px) { .al-sectors { grid-template-columns: 1fr; } }
+.al-specs, .al-foot {
+  display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); gap: 40px clamp(32px, 6vw, 96px); align-items: start;
+  padding: clamp(56px, 11vh, 128px) var(--pad); border-top: 1px solid var(--rule); background: var(--paper); pointer-events: auto;
+}
+.al-foot { padding-bottom: max(24px, env(safe-area-inset-bottom, 0px)); }
+.al-foot .al-cap { margin-bottom: 14px; }
+.al-rows { border-top: 1px solid var(--ink); }
+.al-rows > * { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 4px 16px; padding: 14px 0; border-bottom: 1px solid var(--rule); font-size: .875rem; }
+.al-rows > * > :first-child { color: var(--ink-2); }
+.al-rows .al-num { font-weight: 500; }
+.al-rows a { text-decoration: underline; text-decoration-color: var(--rule-2); text-underline-offset: 4px; }
+.al-specs .al-rows { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: clamp(24px, 3vw, 48px); }
+.al-foot__legal { grid-column: 1 / -1; padding-top: 16px; border-top: 1px solid var(--rule); font-size: .75rem; color: var(--ink-3); }
+
+/* ---- Busy bar, toast, boot veil ---- */
+.al-busy { position: fixed; inset: 0 0 auto; z-index: 30; height: 2px; overflow: hidden; opacity: 0; transition: opacity var(--fast) var(--ease); }
+.al-busy::before { content: ""; position: absolute; inset: 0 auto 0 0; width: 32%; background: var(--signal); animation: al-sweep 1.2s var(--ease) infinite paused; }
+.al-ui[data-loading] .al-busy { opacity: 1; }
+.al-ui[data-loading] .al-busy::before { animation-play-state: running; }
+.al-toast {
+  position: fixed; top: calc(var(--bar) + 12px); left: 50%; z-index: 35; width: max-content; max-width: min(30rem, calc(100vw - 32px));
+  padding: 10px 14px; border-radius: var(--radius); background: var(--ink); font-size: var(--small); font-weight: 500; line-height: 1.35; color: var(--paper);
+  opacity: 0; transform: translate(-50%, -6px); transition: opacity var(--fast) var(--ease), transform var(--fast) var(--ease);
+}
+.al-toast[data-show] { opacity: 1; transform: translate(-50%, 0); }
+.al-veil {
+  position: fixed; inset: 0; z-index: 40; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 22px;
+  padding: 24px; background: var(--paper); pointer-events: auto; transition: opacity var(--slow) var(--ease);
+}
+.al-veil[data-done] { opacity: 0; pointer-events: none; }
+.al-veil__dial { position: relative; width: clamp(112px, 22vmin, 152px); aspect-ratio: 1; }
+.al-ring { width: 100%; height: 100%; }
+.al-ring circle { fill: none; stroke: var(--shell); stroke-width: 1.5; }
+.al-ring :first-child { stroke: var(--ink-3); stroke-width: 3; stroke-dasharray: .3 1.7; }
+.al-ring :last-child { stroke: var(--signal); stroke-width: 3; transition: stroke-dashoffset var(--slow) var(--ease); }
+.al-veil .al-mark { position: absolute; inset: 0; width: 36%; height: 36%; margin: auto; }
+.al-veil__name { display: flex; align-items: baseline; gap: 10px; font-size: var(--small); font-weight: 700; line-height: 1; letter-spacing: .2em; }
+.al-veil__name .al-num { font-weight: 500; letter-spacing: .04em; color: var(--ink-3); }
+.al-veil__status {
+  display: flex; justify-content: space-between; gap: 16px; width: min(17rem, 100%); padding-top: 12px;
+  border-top: 1px solid var(--rule); font-size: var(--small); line-height: 1.3; color: var(--ink-2);
+}
+.al-veil__status .al-num { color: var(--ink); }
+@keyframes al-in { from { opacity: 0; } }
+@keyframes al-sweep { from { transform: translateX(-100%); } to { transform: translateX(313%); } }
+
+@media (hover: hover) {
+  .al-btn--primary:hover { background: var(--ink-2); }
+  .al-btn--primary:hover svg { transform: translateX(3px); }
+  .al-btn--secondary:hover, .al-toggle:hover, .al-top__menu:hover { border-color: var(--ink); }
+  .al-btn--ghost:hover { border-color: var(--ink); background: var(--ink); color: var(--paper); }
+  .al-iconbtn:hover { background: var(--shell); }
+  .al-nav a:hover, .al-seg__opt:not([aria-checked="true"]):hover { color: var(--ink); }
+  .al-hs:hover { z-index: 300 !important; }
+  .al-rows a:hover { text-decoration-color: var(--signal); }
+}
+
+/* ---- 1024 to 1359: the dock wraps to two rows ---- */
+@media (min-width: 1024px) and (max-width: 1359.98px) {
+  .al-dock__groups { display: grid; grid-template-columns: auto auto auto; }
+  .al-group--lid { grid-column: span 2; border-left: 0; }
+  .al-group--lid, .al-group--modes { border-top: 1px solid var(--rule); }
+  .al-modes .al-toggle { flex: 1 1 auto; }
+}
+@media (min-width: 1024px) and (max-height: 619.98px) {
+  .al-hero__lede { display: none; }
+}
+
+/* ---- Below 1024: the rail becomes a strip, the dock becomes tabs ---- */
+@media (max-width: 1023.98px) {
+  .al-layer { grid-template: "top" var(--bar) "rail" auto "hero" minmax(0, 1fr) "dock" auto / minmax(0, 1fr); row-gap: 12px; }
+  .al-top { margin-bottom: -12px; }
+  .al-hero { max-width: min(100%, 34rem); padding-bottom: 0; }
+  /* Rail: one scrolling line of cells under the bar. */
+  .al-rail {
+    display: flex; align-self: start; width: auto; max-height: none; margin: 0 calc(var(--pad) * -1); overflow: auto hidden;
+    overscroll-behavior-x: contain; scroll-snap-type: x proximity; scrollbar-width: none; border-width: 1px 0; border-radius: 0; box-shadow: none;
+  }
+  .al-rail::-webkit-scrollbar { display: none; }
+  .al-rail:focus-visible { outline-offset: -2px; }
+  .al-rail > * { display: flex; flex: none; }
+  .al-rail__head { flex-direction: column; align-items: flex-start; justify-content: center; gap: 6px; padding: 8px 14px 8px var(--pad); border: 0; scroll-snap-align: start; }
+  .al-metric {
+    flex: none; flex-direction: column; align-items: flex-start; gap: 3px; min-width: 5.5rem; padding: 8px 14px 9px;
+    border-bottom: 0; border-left: 1px solid var(--rule); white-space: nowrap; scroll-snap-align: start;
+  }
+  .al-metric .al-num { font-size: 1rem; }
+  .al-metric .al-unit { width: auto; }
+  .al-metric[data-warn]::before { inset: auto 0 0; width: auto; height: 2px; }
+  .al-rail__foot { align-items: center; border-left: 1px solid var(--rule); }
+  .al-chip { margin: 0 14px; }
+  .al-timeline { width: 11rem; padding: 8px var(--pad) 7px 14px; border-left: 1px solid var(--rule); }
+  .al-timeline__bar { height: 8px; margin-top: 6px; }
+  /* Dock: a strip of five readouts; one group opens above it. */
+  .al-dock { display: flex; flex-direction: column-reverse; width: min(100%, 35rem); }
+  .al-tabs { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); }
+  .al-tab { display: grid; align-content: center; gap: 4px; min-height: 48px; padding: 6px 4px; }
+  .al-tab + .al-tab { border-left: 1px solid var(--rule); }
+  .al-tab .al-cap { font-size: .59375rem; letter-spacing: .08em; color: inherit; opacity: .72; }
+  .al-tab b { overflow: hidden; font-size: .75rem; font-weight: 600; line-height: 1.2; text-overflow: ellipsis; white-space: nowrap; }
+  .al-tab[aria-expanded="true"] { background: var(--ink); box-shadow: inset 0 2px 0 var(--signal); color: var(--paper); }
+  .al-tab:focus-visible { outline-offset: -2px; }
+  .al-tab[aria-expanded="true"]:focus-visible { outline-color: var(--paper); outline-offset: -4px; }
+  .al-dock__groups { display: block; }
+  .al-dock .al-group { display: none; padding: 8px; border: 0; border-bottom: 1px solid var(--rule); }
+  .al-dock .al-group[data-open] { display: block; animation: al-in var(--fast) var(--ease) both; }
+  .al-group > .al-cap { display: none; }
+  .al-seg__opt { flex: 1 1 0; min-width: 0; height: 36px; padding: 0 4px; }
+  .al-lid { gap: 12px; padding: 0 4px 0 8px; }
+  .al-modes { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .al-panel__body { top: clamp(84px, 16vh, 160px); }
+  .al-specs, .al-foot { grid-template-columns: minmax(0, 1fr); }
+}
+@media (max-width: 1023.98px) and (max-height: 739.98px) {
+  .al-hero__lede { display: none; }
+}
+@media (max-width: 1023.98px) and (max-height: 479.98px) {
+  .al-eyebrow { display: none; }
+  .al-hero h1 { margin-top: 0; }
+}
+
+/* ---- Below 720: the nav folds into a sheet ---- */
+@media (max-width: 719.98px) {
+  .al-top { grid-template-columns: minmax(0, 1fr) auto; }
+  .al-top__menu { display: inline-grid; }
+  .al-top[data-menu] { border-color: var(--rule); background: var(--paper); pointer-events: auto; }
+  .al-nav {
+    position: absolute; inset: calc(100% + 1px) 0 auto; display: none; flex-direction: column; gap: 0;
+    padding: 0 var(--pad) 8px; border-bottom: 1px solid var(--rule); background: var(--paper);
+  }
+  .al-top[data-menu] .al-nav { display: flex; animation: al-in var(--fast) var(--ease) both; }
+  .al-nav a { height: 48px; padding: 0; border-radius: 0; font-size: 1rem; color: var(--ink); }
+  .al-nav a + a { border-top: 1px solid var(--rule); }
+  .al-nav a::after { inset: 50% 0 auto auto; width: 6px; height: 6px; margin-top: -3px; }
+  .al-specs .al-rows { grid-template-columns: minmax(0, 1fr); }
+}
+
+/* ---- Reduced motion: opacity only ---- */
+@media (prefers-reduced-motion: reduce) {
+  .al-ui, .al-ui *, .al-ui *::before, .al-ui *::after { transition-property: opacity, visibility !important; }
+  .al-toast { transform: translate(-50%, 0); }
+  .al-busy::before { width: 100%; animation: none; }
+}
