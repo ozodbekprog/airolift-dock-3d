@@ -105,7 +105,7 @@ function boot() {
   controls.maxPolarAngle = Math.PI * 0.495;
   controls.enablePan = false;
   controls.rotateSpeed = 0.55;
-  controls.zoomSpeed = 0.6;
+  controls.enableZoom = false; // wheel belongs to the page scroll, not the camera
 
   const params = new URLSearchParams(location.search);
   if (params.has('sector')) state.sector = params.get('sector');

@@ -5,3 +5,4 @@ refs/
 .DS_Store
 _smoke_*.mjs
 .sessions.txt
+.vercel
